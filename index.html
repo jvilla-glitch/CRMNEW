@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Despacho · Gestión</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="config-gate" class="config-gate">
+  <div class="config-card">
+    <p class="eyebrow">Configuración inicial</p>
+    <h1>Conectar con el backend</h1>
+    <p class="config-help">Pega la URL de tu implementación de Apps Script (termina en <code>/exec</code>). Se guarda solo en este navegador.</p>
+    <input id="api-url-input" type="text" placeholder="https://script.google.com/macros/s/XXXXX/exec" autocomplete="off">
+    <button id="api-url-save">Guardar y entrar</button>
+    <p id="api-url-error" class="config-error"></p>
+  </div>
+</div>
+
+<div id="app" class="app hidden">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">§</span>
+      <div>
+        <p class="brand-title">Despacho</p>
+        <p class="brand-sub">Sistema de gestión</p>
+      </div>
+    </div>
+
+    <nav class="nav" id="nav">
+      <button class="nav-item active" data-module="Expedientes">Expedientes</button>
+      <button class="nav-item" data-module="Plazos">Plazos</button>
+      <button class="nav-item" data-module="Agenda">Agenda</button>
+      <button class="nav-item" data-module="Clientes">Clientes</button>
+      <button class="nav-item" data-module="Documentos">Documentos</button>
+      <button class="nav-item" data-module="Facturacion">Facturación</button>
+      <button class="nav-item" data-module="Contrapartes">Contrapartes</button>
+    </nav>
+
+    <button id="reset-config" class="reset-link">Cambiar backend</button>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow" id="module-eyebrow">Módulo</p>
+        <h1 id="module-title">Expedientes</h1>
+      </div>
+      <button id="btn-new" class="btn-primary">+ Nuevo</button>
+    </header>
+
+    <section id="alert-banner" class="alert-banner hidden"></section>
+
+    <section class="table-wrap">
+      <table id="data-table">
+        <thead><tr id="table-head"></tr></thead>
+        <tbody id="table-body"></tbody>
+      </table>
+      <p id="empty-state" class="empty-state hidden">Sin registros todavía.</p>
+      <p id="loading-state" class="loading-state hidden">Cargando…</p>
+    </section>
+  </main>
+</div>
+
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modal-title">Nuevo registro</h2>
+      <button id="modal-close" class="modal-close">&times;</button>
+    </div>
+    <form id="modal-form"></form>
+    <div class="modal-foot">
+      <button id="modal-delete" class="btn-danger hidden">Eliminar</button>
+      <div class="modal-foot-right">
+        <button id="modal-cancel" class="btn-ghost">Cancelar</button>
+        <button id="modal-save" class="btn-primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
