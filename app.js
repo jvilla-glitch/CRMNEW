@@ -1,364 +1,151 @@
-/* =========================================================
-   SISTEMA DE GESTIÓN DE DESPACHO — Frontend
-   Consume la API de Apps Script (ver config.js para la URL).
-   ========================================================= */
+/* ══════════════════════════════════════════════════
+   LEX MACHINA — Core App Utilities v2.0
+══════════════════════════════════════════════════ */
 
-const ESTADOS_COLOR = {
-  pendiente: 'badge-amber',
-  cumplido: 'badge-green',
-  pagado: 'badge-green',
-  realizada: 'badge-green',
-  vencido: 'badge-burgundy',
-  cancelada: 'badge-gray',
-  activo: 'badge-green',
-  concluido: 'badge-gray'
-};
+/* ── API HELPERS (Google Apps Script + Google Sheets) ─────────
+   IMPORTANTE: pega aquí la URL de tu Web App de Apps Script
+   (Deploy > New deployment > Web app), termina en /exec.       */
+const API_URL = 'PEGA_AQUI_TU_URL_DE_APPS_SCRIPT/exec';
 
-const MODULES = {
-  Expedientes: {
-    label: 'Expedientes',
-    columns: ['numero_interno', 'materia', 'fuero', 'estado', 'fecha_apertura'],
-    fields: [
-      { key: 'numero_interno', label: 'Número interno', type: 'text', required: true, placeholder: 'Ej. 014/2026' },
-      { key: 'cliente_id', label: 'Cliente', type: 'ref', refSheet: 'Clientes', refLabel: 'nombre' },
-      { key: 'contraparte', label: 'Contraparte', type: 'text', checkConflict: true },
-      { key: 'materia', label: 'Materia', type: 'select', options: ['civil', 'mercantil', 'penal', 'laboral', 'familiar', 'administrativo'] },
-      { key: 'fuero', label: 'Fuero', type: 'select', options: ['local', 'federal'] },
-      { key: 'juzgado', label: 'Juzgado / Tribunal', type: 'text' },
-      { key: 'numero_causa', label: 'Número de causa / toca', type: 'text' },
-      { key: 'estado', label: 'Estado', type: 'select', options: ['activo', 'suspendido', 'concluido', 'en apelación', 'en amparo'] },
-      { key: 'fecha_apertura', label: 'Fecha de apertura', type: 'date' },
-      { key: 'notas', label: 'Notas', type: 'textarea' }
-    ]
-  },
-  Plazos: {
-    label: 'Plazos',
-    columns: ['descripcion', 'fecha_vencimiento', 'estado', 'responsable'],
-    badgeColumn: 'fecha_vencimiento',
-    fields: [
-      { key: 'expediente_id', label: 'Expediente', type: 'ref', refSheet: 'Expedientes', refLabel: 'numero_interno', required: true },
-      { key: 'descripcion', label: 'Descripción del plazo', type: 'text', required: true, placeholder: 'Ej. Contestar demanda' },
-      { key: 'tipo_termino', label: 'Tipo de término', type: 'select', options: ['habil', 'natural'] },
-      { key: 'ambito', label: 'Ámbito', type: 'select', options: ['local', 'federal'] },
-      { key: 'fecha_inicio', label: 'Fecha de inicio', type: 'date', computeTrigger: true },
-      { key: 'dias', label: 'Días', type: 'number', computeTrigger: true },
-      { key: 'fecha_vencimiento', label: 'Fecha de vencimiento (calculada)', type: 'text', readonly: true },
-      { key: 'estado', label: 'Estado', type: 'select', options: ['pendiente', 'cumplido', 'vencido'] },
-      { key: 'responsable', label: 'Responsable', type: 'text' }
-    ]
-  },
-  Agenda: {
-    label: 'Agenda',
-    columns: ['tipo', 'fecha', 'hora', 'lugar', 'estado'],
-    fields: [
-      { key: 'expediente_id', label: 'Expediente', type: 'ref', refSheet: 'Expedientes', refLabel: 'numero_interno' },
-      { key: 'tipo', label: 'Tipo', type: 'select', options: ['audiencia', 'junta', 'comparecencia', 'otro'] },
-      { key: 'fecha', label: 'Fecha', type: 'date', required: true },
-      { key: 'hora', label: 'Hora', type: 'time' },
-      { key: 'lugar', label: 'Lugar', type: 'text' },
-      { key: 'notas', label: 'Notas', type: 'textarea' },
-      { key: 'estado', label: 'Estado', type: 'select', options: ['pendiente', 'realizada', 'cancelada'] }
-    ]
-  },
-  Clientes: {
-    label: 'Clientes',
-    columns: ['nombre', 'tipo_persona', 'telefono', 'email'],
-    fields: [
-      { key: 'nombre', label: 'Nombre / Razón social', type: 'text', required: true },
-      { key: 'tipo_persona', label: 'Tipo de persona', type: 'select', options: ['física', 'moral'] },
-      { key: 'rfc', label: 'RFC', type: 'text' },
-      { key: 'telefono', label: 'Teléfono', type: 'text' },
-      { key: 'email', label: 'Email', type: 'text' },
-      { key: 'direccion', label: 'Dirección', type: 'textarea' },
-      { key: 'notas', label: 'Notas', type: 'textarea' }
-    ]
-  },
-  Documentos: {
-    label: 'Documentos',
-    columns: ['nombre', 'tipo', 'fecha_subida', 'version'],
-    fields: [
-      { key: 'expediente_id', label: 'Expediente', type: 'ref', refSheet: 'Expedientes', refLabel: 'numero_interno', required: true },
-      { key: 'nombre', label: 'Nombre del documento', type: 'text', required: true },
-      { key: 'tipo', label: 'Tipo', type: 'select', options: ['demanda', 'contestación', 'promoción', 'resolución', 'prueba', 'contrato', 'otro'] },
-      { key: 'url', label: 'Enlace (Google Drive)', type: 'text', placeholder: 'https://drive.google.com/...' },
-      { key: 'fecha_subida', label: 'Fecha', type: 'date' },
-      { key: 'version', label: 'Versión', type: 'text', placeholder: 'v1' }
-    ]
-  },
-  Facturacion: {
-    label: 'Facturación',
-    columns: ['concepto', 'monto', 'estado_pago', 'fecha'],
-    fields: [
-      { key: 'expediente_id', label: 'Expediente', type: 'ref', refSheet: 'Expedientes', refLabel: 'numero_interno' },
-      { key: 'cliente_id', label: 'Cliente', type: 'ref', refSheet: 'Clientes', refLabel: 'nombre', required: true },
-      { key: 'concepto', label: 'Concepto', type: 'text', required: true },
-      { key: 'monto', label: 'Monto (MXN)', type: 'number' },
-      { key: 'modalidad', label: 'Modalidad', type: 'select', options: ['iguala', 'destajo', 'éxito'] },
-      { key: 'fecha', label: 'Fecha', type: 'date' },
-      { key: 'estado_pago', label: 'Estado de pago', type: 'select', options: ['pendiente', 'pagado'] },
-      { key: 'folio_cfdi', label: 'Folio CFDI', type: 'text' }
-    ]
-  },
-  Contrapartes: {
-    label: 'Contrapartes',
-    columns: ['nombre', 'abogado_contrario'],
-    fields: [
-      { key: 'nombre', label: 'Nombre', type: 'text', required: true },
-      { key: 'abogado_contrario', label: 'Abogado contrario', type: 'text' },
-      { key: 'notas', label: 'Notas', type: 'textarea' }
-    ]
-  }
-};
-
-let currentModule = 'Expedientes';
-let currentRecords = [];
-let refCache = {}; // { sheetName: [records] }
-let editingId = null;
-
-function apiGet(params) {
-  const url = new URL(getApiUrl());
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  return fetch(url).then(r => r.json());
+// Convierte '/api/clientes/123' -> '/clientes/123' (el prefijo /api ya no es necesario,
+// pero se deja el mismo formato de llamada en todo el resto del código).
+function _apiPath(url) {
+  return url.replace(/^\/api/, '');
 }
 
-function apiPost(payload) {
-  return fetch(getApiUrl(), {
+async function apiGet(url) {
+  const r = await fetch(`${API_URL}?path=${encodeURIComponent(_apiPath(url))}`);
+  const j = await r.json().catch(() => ({}));
+  if (j && j.error) throw new Error(j.error);
+  return j;
+}
+
+async function _apiSend(url, method, data) {
+  // Content-Type: text/plain evita el preflight OPTIONS que Apps Script no responde.
+  const r = await fetch(API_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // evita preflight CORS
-    body: JSON.stringify(payload)
-  }).then(r => r.json());
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ path: _apiPath(url), method, data: data || {} })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (j && j.error) throw new Error(j.error);
+  return j;
 }
 
-async function getRefRecords(sheetName) {
-  if (!refCache[sheetName]) {
-    const res = await apiGet({ action: 'list', sheet: sheetName });
-    refCache[sheetName] = res.ok ? res.data : [];
-  }
-  return refCache[sheetName];
+async function apiPost(url, data)  { return _apiSend(url, 'POST', data); }
+async function apiPut(url, data)   { return _apiSend(url, 'PUT', data); }
+async function apiDelete(url)      { return _apiSend(url, 'DELETE', {}); }
+
+/* ── NORMALIZE RESPONSE ───────────────────────── */
+function normalizeResponse(r) {
+  if (Array.isArray(r)) return r;
+  if (r && Array.isArray(r.data)) return r.data;
+  if (r && r.data) return [r.data];
+  return [];
 }
 
-function refDisplay(sheetName, refLabel, id) {
-  const list = refCache[sheetName] || [];
-  const rec = list.find(r => String(r.id) === String(id));
-  return rec ? rec[refLabel] : (id ? `#${id}` : '—');
+/* ── DATE HELPERS ─────────────────────────────── */
+function parseLocalDate(str) {
+  if (!str) return new Date('');
+  return new Date(String(str).substring(0, 10) + 'T00:00:00');
 }
 
-/* ---------- Navegación ---------- */
-document.getElementById('nav').addEventListener('click', (e) => {
-  const btn = e.target.closest('.nav-item');
-  if (!btn) return;
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  currentModule = btn.dataset.module;
-  loadModule();
-});
-
-async function loadModule() {
-  const cfg = MODULES[currentModule];
-  document.getElementById('module-eyebrow').textContent = 'Módulo';
-  document.getElementById('module-title').textContent = cfg.label;
-  document.getElementById('alert-banner').classList.add('hidden');
-
-  // precargar hojas de referencia usadas por este módulo
-  const refSheets = new Set(cfg.fields.filter(f => f.type === 'ref').map(f => f.refSheet));
-  await Promise.all([...refSheets].map(getRefRecords));
-
-  document.getElementById('loading-state').classList.remove('hidden');
-  document.getElementById('data-table').classList.add('hidden');
-  document.getElementById('empty-state').classList.add('hidden');
-
-  const res = await apiGet({ action: 'list', sheet: currentModule });
-  currentRecords = res.ok ? res.data : [];
-
-  document.getElementById('loading-state').classList.add('hidden');
-  document.getElementById('data-table').classList.remove('hidden');
-  renderTable();
+function fmtDate(str) {
+  if (!str) return '—';
+  const d = new Date(str);
+  if (isNaN(d)) return '—';
+  return d.toLocaleDateString('es-MX', { day:'numeric', month:'short', year:'numeric' });
 }
 
-function daysUntil(dateStr) {
-  if (!dateStr) return null;
-  const today = new Date(); today.setHours(0,0,0,0);
-  const target = new Date(dateStr + 'T00:00:00');
-  return Math.ceil((target - today) / (1000*60*60*24));
+function fmtMoney(n) {
+  return new Intl.NumberFormat('es-MX', { style:'currency', currency:'MXN', minimumFractionDigits:0 }).format(Number(n) || 0);
 }
 
-function badgeForPlazo(dateStr) {
-  const d = daysUntil(dateStr);
-  if (d === null) return '';
-  let cls = 'badge-green';
-  if (d < 0) cls = 'badge-burgundy';
-  else if (d <= 2) cls = 'badge-burgundy';
-  else if (d <= 5) cls = 'badge-amber';
-  const label = d < 0 ? `venció hace ${Math.abs(d)}d` : (d === 0 ? 'hoy' : `${d}d`);
-  return `<span class="badge ${cls}">${dateStr} · ${label}</span>`;
+function initials(name) {
+  if (!name) return '?';
+  return name.trim().split(/\s+/).slice(0,2).map(w => w[0]).join('').toUpperCase();
 }
 
-function renderTable() {
-  const cfg = MODULES[currentModule];
-  const head = document.getElementById('table-head');
-  const body = document.getElementById('table-body');
-  head.innerHTML = cfg.columns.map(c => {
-    const field = cfg.fields.find(f => f.key === c);
-    return `<th>${field ? field.label : c}</th>`;
-  }).join('');
+/* ── DATE CHIP ────────────────────────────────── */
+(function() {
+  const el = document.getElementById('current-date');
+  if (!el) return;
+  const now = new Date();
+  el.textContent = now.toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+})();
 
-  if (currentRecords.length === 0) {
-    body.innerHTML = '';
-    document.getElementById('empty-state').classList.remove('hidden');
-    return;
-  }
-  document.getElementById('empty-state').classList.add('hidden');
+/* ── TOAST SYSTEM ─────────────────────────────── */
+function toast(msg, type = 'success') {
+  const stack = document.querySelector('.toast-stack');
+  if (!stack) return;
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  const icons = { success: '✓', error: '✕', info: 'i', warning: '!' };
+  el.innerHTML = `<span style="font-weight:700;font-size:15px;opacity:.7">${icons[type]||'i'}</span><span>${msg}</span>`;
+  stack.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateY(4px)'; el.style.transition = '0.2s'; setTimeout(() => el.remove(), 200); }, 3200);
+}
 
-  body.innerHTML = currentRecords.map(rec => {
-    const cells = cfg.columns.map(c => {
-      const field = cfg.fields.find(f => f.key === c);
-      let val = rec[c];
-      if (field && field.type === 'ref') {
-        val = refDisplay(field.refSheet, field.refLabel, val);
-      }
-      if (c === cfg.badgeColumn) {
-        return `<td>${badgeForPlazo(val)}</td>`;
-      }
-      if (['estado', 'estado_pago', 'tipo_termino'].includes(c) && val) {
-        const cls = ESTADOS_COLOR[val] || 'badge-gray';
-        return `<td><span class="badge ${cls}">${val}</span></td>`;
-      }
-      return `<td>${val === undefined || val === '' ? '—' : val}</td>`;
-    }).join('');
-    return `<tr data-id="${rec.id}">${cells}</tr>`;
-  }).join('');
+/* ── MODAL HELPERS ────────────────────────────── */
+function openModal(id)  { const m = document.getElementById(id); if(m){ m.style.display='flex'; m.classList.add('open'); document.body.style.overflow='hidden'; } }
+function closeModal(id) { const m = document.getElementById(id); if(m){ m.style.display='none'; m.classList.remove('open'); document.body.style.overflow=''; } }
 
-  body.querySelectorAll('tr').forEach(tr => {
-    tr.addEventListener('click', () => {
-      const rec = currentRecords.find(r => String(r.id) === tr.dataset.id);
-      openModal(rec);
-    });
+/* ── CONFIRM DELETE ───────────────────────────── */
+function confirmDelete(msg = '¿Eliminar este registro?') {
+  return new Promise(resolve => {
+    const id = '__confirm_' + Date.now();
+    const el = document.createElement('div');
+    el.id = id;
+    el.className = 'overlay';
+    el.style.display = 'flex';
+    el.innerHTML = `
+      <div class="modal" style="max-width:380px;">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title" style="color:var(--danger)">Confirmar eliminación</div>
+            <div class="modal-subtitle">${msg}</div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" onclick="document.getElementById('${id}').remove();Promise.resolve(false)">Cancelar</button>
+          <button class="btn btn-danger" id="${id}_ok">Eliminar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    document.getElementById(id + '_ok').onclick = () => { el.remove(); resolve(true); };
+    el.onclick = e => { if(e.target === el) { el.remove(); resolve(false); } };
   });
 }
 
-/* ---------- Modal / formulario ---------- */
-document.getElementById('btn-new').addEventListener('click', () => openModal(null));
-document.getElementById('modal-close').addEventListener('click', closeModal);
-document.getElementById('modal-cancel').addEventListener('click', closeModal);
-document.getElementById('modal-overlay').addEventListener('click', (e) => {
-  if (e.target.id === 'modal-overlay') closeModal();
-});
-
-function closeModal() {
-  document.getElementById('modal-overlay').classList.add('hidden');
-  editingId = null;
+/* ── BADGE HELPER ─────────────────────────────── */
+function badge(estatus) {
+  const map = {
+    activo:     ['badge-success', 'Activo'],
+    nuevo:      ['badge-info',    'Nuevo'],
+    convertido: ['badge-gold',    'Convertido'],
+    inactivo:   ['badge-neutral', 'Inactivo'],
+    pagado:     ['badge-success', 'Pagado'],
+    parcial:    ['badge-warning', 'Parcial'],
+    pendiente:  ['badge-warning', 'Pendiente'],
+    vencido:    ['badge-danger',  'Vencido'],
+    cancelado:  ['badge-neutral', 'Cancelado'],
+    en_proceso: ['badge-info',    'En proceso'],
+    cerrado:    ['badge-neutral', 'Cerrado'],
+    resuelto:   ['badge-success', 'Resuelto'],
+  };
+  const [cls, label] = map[estatus] || ['badge-neutral', estatus || '—'];
+  return `<span class="badge ${cls}">${label}</span>`;
 }
 
-async function openModal(record) {
-  const cfg = MODULES[currentModule];
-  editingId = record ? record.id : null;
-  document.getElementById('modal-title').textContent = record ? `Editar — ${cfg.label}` : `Nuevo — ${cfg.label}`;
-  document.getElementById('modal-delete').classList.toggle('hidden', !record);
-
-  const form = document.getElementById('modal-form');
-  form.innerHTML = '';
-
-  for (const field of cfg.fields) {
-    const wrap = document.createElement('div');
-    wrap.className = 'field';
-    const label = document.createElement('label');
-    label.textContent = field.label + (field.required ? ' *' : '');
-    wrap.appendChild(label);
-
-    let input;
-    if (field.type === 'select') {
-      input = document.createElement('select');
-      input.innerHTML = '<option value="">—</option>' + field.options.map(o => `<option value="${o}">${o}</option>`).join('');
-    } else if (field.type === 'ref') {
-      input = document.createElement('select');
-      const list = await getRefRecords(field.refSheet);
-      input.innerHTML = '<option value="">—</option>' + list.map(r => `<option value="${r.id}">${r[field.refLabel]}</option>`).join('');
-    } else if (field.type === 'textarea') {
-      input = document.createElement('textarea');
+/* ── NAV ACTIVE STATE ─────────────────────────── */
+(function() {
+  const path = window.location.pathname;
+  document.querySelectorAll('.nav-link').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href && (path === href || (href !== '/' && path.startsWith(href)))) {
+      a.classList.add('active');
     } else {
-      input = document.createElement('input');
-      input.type = field.type === 'text' ? 'text' : field.type;
-      if (field.placeholder) input.placeholder = field.placeholder;
+      a.classList.remove('active');
     }
-    input.name = field.key;
-    if (field.readonly) input.readOnly = true;
-    if (record && record[field.key] !== undefined) input.value = record[field.key];
-    wrap.appendChild(input);
-    form.appendChild(wrap);
-
-    // Recalcular vencimiento de plazo cuando cambian fecha_inicio, dias, tipo o ambito
-    if (currentModule === 'Plazos' && field.computeTrigger) {
-      input.addEventListener('change', () => recomputeDeadlinePreview(form));
-    }
-    if (currentModule === 'Plazos' && (field.key === 'tipo_termino' || field.key === 'ambito')) {
-      input.addEventListener('change', () => recomputeDeadlinePreview(form));
-    }
-
-    // Verificación de conflicto al capturar la contraparte
-    if (field.checkConflict) {
-      input.addEventListener('blur', () => runConflictCheck(input.value));
-    }
-  }
-
-  document.getElementById('modal-overlay').classList.remove('hidden');
-}
-
-async function recomputeDeadlinePreview(form) {
-  const fi = form.elements['fecha_inicio'] ? form.elements['fecha_inicio'].value : '';
-  const dias = form.elements['dias'] ? form.elements['dias'].value : '';
-  const tipo = form.elements['tipo_termino'] ? form.elements['tipo_termino'].value : '';
-  const ambito = form.elements['ambito'] ? form.elements['ambito'].value : '';
-  if (!fi || !dias || !tipo) return;
-  const res = await apiGet({ action: 'computeDeadline', fecha_inicio: fi, dias, tipo_termino: tipo, ambito: ambito || 'local' });
-  if (res.ok && form.elements['fecha_vencimiento']) {
-    form.elements['fecha_vencimiento'].value = res.data.fecha_vencimiento;
-  }
-}
-
-async function runConflictCheck(nombre) {
-  const banner = document.getElementById('alert-banner');
-  if (!nombre) { banner.classList.add('hidden'); return; }
-  const res = await apiGet({ action: 'checkConflict', nombre });
-  if (res.ok && res.data.posibleConflicto) {
-    banner.textContent = `⚠ Posible conflicto de interés: "${nombre}" aparece como cliente en otro expediente y como contraparte.`;
-    banner.classList.remove('hidden');
-  } else {
-    banner.classList.add('hidden');
-  }
-}
-
-document.getElementById('modal-save').addEventListener('click', async () => {
-  const cfg = MODULES[currentModule];
-  const form = document.getElementById('modal-form');
-  const data = {};
-  for (const field of cfg.fields) {
-    data[field.key] = form.elements[field.key].value;
-  }
-  const missing = cfg.fields.filter(f => f.required && !data[f.key]);
-  if (missing.length) {
-    alert('Falta capturar: ' + missing.map(f => f.label).join(', '));
-    return;
-  }
-
-  const payload = editingId
-    ? { action: 'update', sheet: currentModule, id: editingId, data }
-    : { action: 'create', sheet: currentModule, data };
-
-  const res = await apiPost(payload);
-  if (!res.ok) { alert('Error: ' + res.error); return; }
-  closeModal();
-  loadModule();
-});
-
-document.getElementById('modal-delete').addEventListener('click', async () => {
-  if (!editingId) return;
-  if (!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
-  const res = await apiPost({ action: 'delete', sheet: currentModule, id: editingId });
-  if (!res.ok) { alert('Error: ' + res.error); return; }
-  closeModal();
-  loadModule();
-});
-
-/* ---------- Arranque ---------- */
-window.onApiUrlReady = loadModule;
-if (getApiUrl()) loadModule();
+  });
+})();
