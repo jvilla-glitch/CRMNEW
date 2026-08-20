@@ -5,7 +5,7 @@
 /* ── API HELPERS (Google Apps Script + Google Sheets) ─────────
    IMPORTANTE: pega aquí la URL de tu Web App de Apps Script
    (Deploy > New deployment > Web app), termina en /exec.       */
-const API_URL = 'https://script.google.com/macros/s/AKfycbxalErimp-gzVmo8vHOazdgZW2yc4ho6bbZSa8naAp1QgADSuCXy8q74KwGZFsr0wSZ/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyQETs6n-ZqGpxV3Cxypn0rPtr-IT0QEVdnbfH3ht0swctzndKdL9Zr2_AlSv7OhsSo/exec';
 
 // Convierte '/api/clientes/123' -> '/clientes/123' (el prefijo /api ya no es necesario,
 // pero se deja el mismo formato de llamada en todo el resto del código).
